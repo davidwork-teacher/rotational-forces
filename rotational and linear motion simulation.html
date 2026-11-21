@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rocket Beam Simulator</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: #ffffff;
+            --text-main: #333;
+            --text-sub: #666;
+            --accent-green: #4CAF50;
+            --accent-yellow: #FFC107;
+        }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #canvas-container {
+            flex: 1;
+            background-color: var(--bg-color);
+            position: relative;
+            overflow: hidden;
+            cursor: grab;
+        }
+        #canvas-container:active { cursor: grabbing; }
+        canvas { display: block; }
+
+        #hud {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 14px;
+            background: rgba(255, 255, 255, 0.92);
+            padding: 8px 18px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            pointer-events: none;
+            z-index: 10;
+        }
+        .hud-item { text-align: center; min-width: 62px; }
+        .hud-label { font-size: 10px; color: var(--text-sub); text-transform: uppercase; font-weight: bold; }
+        .hud-value { font-size: 14px; color: var(--text-main); font-weight: bold; font-family: monospace; }
+
+        #controls {
+            background: var(--panel-bg);
+            padding: 12px 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 10;
+            height: 260px;
+        }
+        .force-config { display: flex; flex-direction: column; gap: 8px; }
+        .force-title { display: flex; align-items: center; font-weight: bold; font-size: 15px; margin-bottom: 4px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+        .dot-green { background-color: var(--accent-green); }
+        .dot-yellow { background-color: var(--accent-yellow); }
+        .dot-blue { background-color: #3b82f6; }
+
+        .slider-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-sub);
+        }
+        .slider-row label { width: 130px; }
+        input[type=range] { flex: 1; margin: 0 8px; cursor: pointer; accent-color: #3b82f6; }
+        .val-display {
+            width: 56px;
+            text-align: right;
+            font-weight: bold;
+            color: var(--text-main);
+            font-family: monospace;
+        }
+
+        .global-controls {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 10;
+            background: rgba(255,255,255,0.92);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            width: 150px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        .global-controls .btn-row { display: flex; gap: 6px; }
+        .global-controls .btn-row button { flex: 1; padding: 6px 4px; font-size: 11px; }
+        .global-controls label { display: flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; font-size: 11px; }
+        .global-controls .slider-line {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+        }
+        .global-controls .slider-line span:first-child { flex: 0 0 32px; color: var(--text-sub); }
+        .global-controls .slider-line span:last-child { flex: 0 0 34px; text-align: right; font-family: monospace; font-weight: bold; }
+        .global-controls input[type=range] { flex: 1; margin: 0; }
+        .global-controls .damp-band {
+            font-family: monospace;
+            font-size: 10px;
+            color: #3b82f6;
+            background: #eff6ff;
+            padding: 3px 6px;
+            border-radius: 3px;
+            text-align: center;
+            margin-top: 2px;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            background-color: #e2e8f0;
+            color: #334155;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #cbd5e1; }
+        button.primary { background-color: #3b82f6; color: white; }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container">
+        <div id="hud">
+            <div class="hud-item">
+                <div class="hud-label">Mass</div>
+                <div class="hud-value" id="val-mass">2.0 kg</div>
+            </div>
+            <div class="hud-item">
+                <div class="hud-label">Lin Vel</div>
+                <div class="hud-value" id="val-linear">0.00 m/s</div>
+            </div>
+            <div class="hud-item">
+                <div class="hud-label">Lin Accel</div>
+                <div class="hud-value" id="val-linaccel">0.00 m/s²</div>
+            </div>
+            <div class="hud-item">
+                <div class="hud-label">Ang Vel (ω)</div>
+                <div class="hud-value" id="val-angular">0.000 rad/s</div>
+            </div>
+            <div class="hud-item">
+                <div class="hud-label">Ang Accel (α)</div>
+                <div class="hud-value" id="val-angaccel">0.000 rad/s²</div>
+            </div>
+            <div class="hud-item">
+                <div class="hud-label">Orient</div>
+                <div class="hud-value" id="val-orientation">0°</div>
+            </div>
+            <div class="hud-item">
+                <div class="hud-label">Net Thrust</div>
+                <div class="hud-value" id="val-netthrust">0 N</div>
+            </div>
+        </div>
+
+        <div class="global-controls">
+            <div class="btn-row">
+                <button id="btn-pause">Pause</button>
+                <button id="btn-reset" class="primary">Reset</button>
+            </div>
+            <label><input type="checkbox" id="damp-rotation"> Smooth log damping</label>
+            <div class="damp-band" id="damp-band-display">α ×1.000</div>
+            <label><input type="checkbox" id="show-trail" checked> CoM trail</label>
+            <button id="btn-clear-trail" style="font-size:10px; padding:3px 6px;">Clear trail</button>
+            <div class="slider-line">
+                <span>Zoom</span>
+                <input type="range" id="zoom-slider" min="0" max="1" step="0.001" value="0.6">
+                <span id="zoom-label">0.15×</span>
+            </div>
+            <div class="slider-line">
+                <span>Speed</span>
+                <input type="range" id="time-scale" min="0.1" max="2" step="0.1" value="1">
+                <span id="speed-label">1.0×</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <div class="force-config">
+            <div class="force-title"><div class="dot dot-green"></div> Thruster 1 (Green)</div>
+            <div class="slider-row">
+                <label>Magnitude</label>
+                <input type="range" id="f1-mag" min="0" max="200" step="10" value="40">
+                <div class="val-display" id="f1-mag-val">40 N</div>
+            </div>
+            <div class="slider-row">
+                <label>Angle (rel. to beam)</label>
+                <input type="range" id="f1-ang" min="-180" max="180" step="45" value="90">
+                <div class="val-display" id="f1-ang-val">90°</div>
+            </div>
+            <div class="slider-row">
+                <label>Position from Center</label>
+                <input type="range" id="f1-pos" min="-32" max="32" step="1" value="-20">
+                <div class="val-display" id="f1-pos-val">-20 m</div>
+            </div>
+        </div>
+
+        <div class="force-config">
+            <div class="force-title"><div class="dot dot-yellow"></div> Thruster 2 (Yellow)</div>
+            <div class="slider-row">
+                <label>Magnitude</label>
+                <input type="range" id="f2-mag" min="0" max="200" step="10" value="40">
+                <div class="val-display" id="f2-mag-val">40 N</div>
+            </div>
+            <div class="slider-row">
+                <label>Angle (rel. to beam)</label>
+                <input type="range" id="f2-ang" min="-180" max="180" step="45" value="-90">
+                <div class="val-display" id="f2-ang-val">-90°</div>
+            </div>
+            <div class="slider-row">
+                <label>Position from Center</label>
+                <input type="range" id="f2-pos" min="-32" max="32" step="1" value="20">
+                <div class="val-display" id="f2-pos-val">20 m</div>
+            </div>
+        </div>
+
+        <div class="force-config">
+            <div class="force-title"><div class="dot dot-blue"></div> Beam</div>
+            <div class="slider-row">
+                <label>Mass</label>
+                <input type="range" id="beam-mass" min="0.1" max="50" step="0.1" value="2">
+                <div class="val-display" id="beam-mass-val">2.0 kg</div>
+            </div>
+            <div style="font-size:11px; color:var(--text-sub); margin-top:4px; line-height:1.5;">
+                Booster straddles the beam. Plume fires opposite thrust. Log damping reduces effective torque (not force) as ω grows.
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+
+    <script>
+        const { Engine, Render, Runner, World, Bodies, Body, Events } = Matter;
+
+        const engine = Engine.create();
+        const world = engine.world;
+        engine.gravity.y = 0;
+
+        const container = document.getElementById('canvas-container');
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+
+        const camera = { x: 0, y: 0, zoom: 1 };
+
+        const ZOOM_MIN = 0.005;
+        const ZOOM_MAX = 20;
+        function sliderToZoom(t) { return ZOOM_MIN * Math.pow(ZOOM_MAX / ZOOM_MIN, t); }
+        function zoomToSlider(z) { return Math.log(z / ZOOM_MIN) / Math.log(ZOOM_MAX / ZOOM_MIN); }
+
+        const render = Render.create({
+            canvas: canvas,
+            engine: engine,
+            options: {
+                width: container.clientWidth,
+                height: container.clientHeight,
+                wireframes: false,
+                background: '#0b0f19',
+                pixelRatio: window.devicePixelRatio
+            }
+        });
+        Render.run(render);
+        const runner = Runner.create();
+        Runner.run(runner, engine);
+
+        // --- Beam: 50 × 3200 px = 1 m × 64 m ---
+        const PIXELS_PER_METER = 50;
+        const rodWidth = 50;
+        const rodHeight = 3200;
+        const halfWidth = rodWidth / 2;
+        const halfLength = rodHeight / 2;
+
+        const rod = Bodies.rectangle(render.options.width / 2, render.options.height / 2, rodWidth, rodHeight, {
+            frictionAir: 0.0,
+            friction: 0,
+            frictionStatic: 0,
+            density: 0.001,
+            render: { visible: false }
+        });
+        World.add(world, rod);
+
+        const initialRodState = {
+            x: render.options.width / 2,
+            y: render.options.height / 2,
+            angle: -125 * (Math.PI / 180)
+        };
+        Body.setAngle(rod, initialRodState.angle);
+
+        function setBeamMass(kg) {
+            Body.setMass(rod, kg);
+        }
+
+        function applyCamera(ctx) {
+            const cw = render.options.width / 2;
+            const ch = render.options.height / 2;
+            const focusX = initialRodState.x + camera.x;
+            const focusY = initialRodState.y + camera.y;
+            ctx.translate(cw, ch);
+            ctx.scale(camera.zoom, camera.zoom);
+            ctx.translate(-focusX, -focusY);
+        }
+
+        function drawGrid(ctx) {
+            let gridSize = 50;
+            while (gridSize * camera.zoom < 25) gridSize *= 2;
+            while (gridSize * camera.zoom > 200) gridSize /= 2;
+
+            const w = render.options.width / camera.zoom;
+            const h = render.options.height / camera.zoom;
+            const cx = initialRodState.x + camera.x;
+            const cy = initialRodState.y + camera.y;
+            const x0 = cx - w / 2, x1 = cx + w / 2;
+            const y0 = cy - h / 2, y1 = cy + h / 2;
+
+            ctx.strokeStyle = '#1a1f2e';
+            ctx.lineWidth = 1 / camera.zoom;
+            ctx.beginPath();
+            for (let x = Math.floor(x0 / gridSize) * gridSize; x <= x1; x += gridSize) {
+                ctx.moveTo(x, y0); ctx.lineTo(x, y1);
+            }
+            for (let y = Math.floor(y0 / gridSize) * gridSize; y <= y1; y += gridSize) {
+                ctx.moveTo(x0, y); ctx.lineTo(x1, y);
+            }
+            ctx.stroke();
+
+            const om = 8 / camera.zoom;
+            ctx.strokeStyle = '#334155';
+            ctx.beginPath();
+            ctx.moveTo(-om, 0); ctx.lineTo(om, 0);
+            ctx.moveTo(0, -om); ctx.lineTo(0, om);
+            ctx.stroke();
+        }
+
+        const trail = [];
+        let showTrail = true;
+        const TRAIL_MAX = 800;
+        const TRAIL_LIFE = 600;
+
+        // --- Conversions ---
+        function getWorldPoint(body, localPoint) {
+            const cos = Math.cos(body.angle);
+            const sin = Math.sin(body.angle);
+            return {
+                x: body.position.x + (localPoint.x * cos - localPoint.y * sin),
+                y: body.position.y + (localPoint.x * sin + localPoint.y * cos)
+            };
+        }
+
+        function sliderToLocalDir(theta) {
+            return { x: Math.sin(theta), y: -Math.cos(theta) };
+        }
+
+        function localDirToWorldDir(lx, ly, bodyAngle) {
+            const cos = Math.cos(bodyAngle);
+            const sin = Math.sin(bodyAngle);
+            return { x: lx * cos - ly * sin, y: lx * sin + ly * cos };
+        }
+
+        // --- Smooth logarithmic damping ---
+        function smoothLogDamping(omega) {
+            const w = Math.max(Math.abs(omega), 1e-6);
+            if (w <= 1) return 1.0;
+            const mult = Math.pow(10, -(Math.log10(w) - 1));
+            return Math.max(0.001, Math.min(1.0, mult));
+        }
+
+        // --- Physics ---
+        const FORCE_MULTIPLIER = 0.0005;
+
+        let isPaused = false;
+        let timeScale = 1.0;
+        let dampRotation = false;
+        let lastVelocity = { x: 0, y: 0 };
+        let lastAngVel = 0;
+        let linearAccel = 0;
+        let angAccel = 0;
+        let netThrust = 0;
+
+        function setPaused(p) {
+            isPaused = p;
+            if (p) { runner.enabled = false; engine.timing.timeScale = 0; }
+            else { runner.enabled = true; engine.timing.timeScale = timeScale; }
+            document.getElementById('btn-pause').innerText = p ? 'Resume' : 'Pause';
+            document.getElementById('btn-pause').classList.toggle('primary', p);
+        }
+
+        Events.on(engine, 'beforeUpdate', () => {
+            if (isPaused) return;
+            engine.timing.timeScale = timeScale;
+            applyForces();
+        });
+
+        function getInputs() {
+            return {
+                f1Mag: parseFloat(document.getElementById('f1-mag').value),
+                f1Ang: parseFloat(document.getElementById('f1-ang').value) * Math.PI / 180,
+                f1Pos: parseFloat(document.getElementById('f1-pos').value) * PIXELS_PER_METER,
+                f2Mag: parseFloat(document.getElementById('f2-mag').value),
+                f2Ang: parseFloat(document.getElementById('f2-ang').value) * Math.PI / 180,
+                f2Pos: parseFloat(document.getElementById('f2-pos').value) * PIXELS_PER_METER
+            };
+        }
+
+        // --- The torque-damping fix: move the physics mount point toward the CoM ---
+        // The visual mount is at (0, pos) on the beam axis. The physics mount is
+        // at (0, pos * torqueScale), so the moment arm from the CoM is reduced
+        // by exactly torqueScale. The full force is still applied (so linear
+        // physics is unchanged), but the resulting torque is scaled.
+        //
+        // For an axial thruster (angle 0°/180°), the force is parallel to the
+        // beam axis, and the mount is on the axis, so the moment is zero at any
+        // mount position — moving the mount toward the CoM changes nothing.
+        function getForceMountLocal(pos, torqueScale) {
+            return { x: 0, y: pos * torqueScale };
+        }
+
+        function applyForces() {
+            const { f1Mag, f1Ang, f1Pos, f2Mag, f2Ang, f2Pos } = getInputs();
+
+            const d1Local = sliderToLocalDir(f1Ang);
+            const d2Local = sliderToLocalDir(f2Ang);
+            const d1World = localDirToWorldDir(d1Local.x, d1Local.y, rod.angle);
+            const d2World = localDirToWorldDir(d2Local.x, d2Local.y, rod.angle);
+
+            const force1 = { x: d1World.x * f1Mag * FORCE_MULTIPLIER, y: d1World.y * f1Mag * FORCE_MULTIPLIER };
+            const force2 = { x: d2World.x * f2Mag * FORCE_MULTIPLIER, y: d2World.y * f2Mag * FORCE_MULTIPLIER };
+
+            let torqueScale = 1.0;
+            if (dampRotation) {
+                const omega = rod.angularVelocity * 1000;
+                torqueScale = smoothLogDamping(omega);
+            }
+
+            const m1 = getWorldPoint(rod, getForceMountLocal(f1Pos, torqueScale));
+            const m2 = getWorldPoint(rod, getForceMountLocal(f2Pos, torqueScale));
+
+            if (f1Mag > 0) Body.applyForce(rod, m1, force1);
+            if (f2Mag > 0) Body.applyForce(rod, m2, force2);
+
+            netThrust = Math.hypot(d1World.x * f1Mag + d2World.x * f2Mag, d1World.y * f1Mag + d2World.y * f2Mag);
+        }
+
+        Events.on(engine, 'afterUpdate', () => {
+            if (isPaused) return;
+            trail.push({ x: rod.position.x, y: rod.position.y, age: 0 });
+            if (trail.length > TRAIL_MAX) trail.shift();
+            for (const p of trail) p.age++;
+            while (trail.length && trail[0].age > TRAIL_LIFE) trail.shift();
+        });
+
+        // --- Rendering ---
+        Events.on(render, 'afterRender', () => {
+            const ctx = render.context;
+            ctx.save();
+            applyCamera(ctx);
+
+            drawGrid(ctx);
+
+            if (showTrail && trail.length > 1) {
+                for (let i = 1; i < trail.length; i++) {
+                    const a = trail[i - 1], b = trail[i];
+                    const alpha = Math.max(0, 1 - b.age / TRAIL_LIFE);
+                    ctx.strokeStyle = `rgba(255, 107, 107, ${alpha * 0.8})`;
+                    ctx.lineWidth = 2 / camera.zoom;
+                    ctx.beginPath();
+                    ctx.moveTo(a.x, a.y);
+                    ctx.lineTo(b.x, b.y);
+                    ctx.stroke();
+                }
+            }
+
+            ctx.save();
+            ctx.translate(rod.position.x, rod.position.y);
+            ctx.rotate(rod.angle);
+            ctx.fillStyle = '#2a2e38';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2 / camera.zoom;
+            ctx.beginPath();
+            ctx.rect(-rodWidth / 2, -rodHeight / 2, rodWidth, rodHeight);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.beginPath();
+            ctx.arc(rod.position.x, rod.position.y, 8 / camera.zoom, 0, Math.PI * 2);
+            ctx.strokeStyle = '#ff4d4d';
+            ctx.lineWidth = 2 / camera.zoom;
+            ctx.stroke();
+            ctx.fillStyle = '#0b0f19';
+            ctx.fill();
+
+            const { f1Mag, f1Ang, f1Pos, f2Mag, f2Ang, f2Pos } = getInputs();
+            const d1Local = sliderToLocalDir(f1Ang);
+            const d2Local = sliderToLocalDir(f2Ang);
+
+            // The visual mount is always at the slider position (on the beam axis).
+            drawRocket(ctx, f1Pos, d1Local, f1Mag, '#4CAF50');
+            drawRocket(ctx, f2Pos, d2Local, f2Mag, '#FFC107');
+
+            if (netThrust > 1) {
+                const d1World = localDirToWorldDir(d1Local.x, d1Local.y, rod.angle);
+                const d2World = localDirToWorldDir(d2Local.x, d2Local.y, rod.angle);
+                const nx = d1World.x * f1Mag + d2World.x * f2Mag;
+                const ny = d1World.y * f1Mag + d2World.y * f2Mag;
+                const nl = Math.hypot(nx, ny);
+                const scale = 0.4;
+                const ex = rod.position.x + (nx / nl) * nl * scale;
+                const ey = rod.position.y + (ny / nl) * nl * scale;
+
+                ctx.beginPath();
+                ctx.moveTo(rod.position.x, rod.position.y);
+                ctx.lineTo(ex, ey);
+                ctx.strokeStyle = '#ff6b6b';
+                ctx.lineWidth = 4 / camera.zoom;
+                ctx.stroke();
+
+                const ang = Math.atan2(ey - rod.position.y, ex - rod.position.x);
+                const ah = 14 / camera.zoom;
+                ctx.beginPath();
+                ctx.moveTo(ex, ey);
+                ctx.lineTo(ex - ah * Math.cos(ang - Math.PI / 6), ey - ah * Math.sin(ang - Math.PI / 6));
+                ctx.lineTo(ex - ah * Math.cos(ang + Math.PI / 6), ey - ah * Math.sin(ang + Math.PI / 6));
+                ctx.fillStyle = '#ff6b6b';
+                ctx.fill();
+            }
+
+            ctx.restore();
+        });
+
+        // --- Draw a booster straddling the beam ---
+        // Local frame: +x is the THRUST direction. Nose at +x, nozzle at -x,
+        // plume exits -x (opposite thrust — reaction).
+        function drawRocket(ctx, pos, localDir, magnitude, color) {
+            const mountLocal = { x: 0, y: Math.max(-halfLength, Math.min(halfLength, pos)) };
+            const mountWorld = getWorldPoint(rod, mountLocal);
+            const thrustWorld = localDirToWorldDir(localDir.x, localDir.y, rod.angle);
+            const thrustWorldAngle = Math.atan2(thrustWorld.y, thrustWorld.x);
+
+            ctx.save();
+            ctx.translate(mountWorld.x, mountWorld.y);
+            ctx.rotate(thrustWorldAngle);
+
+            const bodyLen = 80;
+            const bodyW = 30;
+            const bodyStart = -bodyLen * 0.5;
+
+            // Body
+            ctx.fillStyle = '#555c6b';
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3 / camera.zoom;
+            ctx.beginPath();
+            ctx.roundRect(bodyStart, -bodyW / 2, bodyLen, bodyW, 6);
+            ctx.fill();
+            ctx.stroke();
+
+            // Nose cone at +x
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(bodyStart + bodyLen, -bodyW / 2);
+            ctx.lineTo(bodyStart + bodyLen + 18, 0);
+            ctx.lineTo(bodyStart + bodyLen, bodyW / 2);
+            ctx.closePath();
+            ctx.fill();
+
+            // Nozzle flare at -x
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(bodyStart, -bodyW / 2 - 4);
+            ctx.lineTo(bodyStart - 10, -bodyW / 2);
+            ctx.lineTo(bodyStart - 10, bodyW / 2);
+            ctx.lineTo(bodyStart, bodyW / 2 + 4);
+            ctx.closePath();
+            ctx.fill();
+
+            // Exhaust plume exits -x (opposite thrust)
+            if (magnitude > 0) {
+                const plumeLen = Math.min(200, 20 + magnitude * 1.5);
+                const flicker = 0.7 + Math.random() * 0.3;
+                const startX = bodyStart - 10;
+                const grad = ctx.createLinearGradient(startX, 0, startX - plumeLen * flicker, 0);
+                grad.addColorStop(0, color);
+                grad.addColorStop(0.4, color + 'cc');
+                grad.addColorStop(1, color + '00');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.moveTo(startX, -bodyW / 2 + 4);
+                ctx.lineTo(startX - plumeLen * flicker, 0);
+                ctx.lineTo(startX, bodyW / 2 - 4);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = '#fff8e0';
+                ctx.globalAlpha = 0.7;
+                ctx.beginPath();
+                ctx.moveTo(startX, -8);
+                ctx.lineTo(startX - plumeLen * flicker * 0.5, 0);
+                ctx.lineTo(startX, 8);
+                ctx.closePath();
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            }
+            ctx.restore();
+        }
+
+        // --- HUD ---
+        Events.on(engine, 'afterUpdate', () => {
+            const speed = Math.sqrt(rod.velocity.x ** 2 + rod.velocity.y ** 2);
+            document.getElementById('val-linear').innerText = (speed / PIXELS_PER_METER).toFixed(2) + ' m/s';
+            document.getElementById('val-mass').innerText = rod.mass.toFixed(1) + ' kg';
+
+            const dtMs = engine.timing.lastDelta || 16.666;
+            const ticksPerSec = 1000 / dtMs;
+
+            const dvx = rod.velocity.x - lastVelocity.x;
+            const dvy = rod.velocity.y - lastVelocity.y;
+            const rawLinAccel = (Math.hypot(dvx, dvy) / PIXELS_PER_METER) * ticksPerSec * ticksPerSec;
+            linearAccel = linearAccel * 0.8 + rawLinAccel * 0.2;
+            document.getElementById('val-linaccel').innerText = linearAccel.toFixed(2) + ' m/s²';
+
+            const omega = rod.angularVelocity * 1000;
+            document.getElementById('val-angular').innerText = omega.toFixed(3) + ' rad/s';
+
+            const domega = omega - lastAngVel;
+            let rawAngAccel = domega * ticksPerSec;
+            if (Math.abs(rawAngAccel) < 0.01) rawAngAccel = 0;
+            angAccel = angAccel * 0.8 + rawAngAccel * 0.2;
+            if (Math.abs(angAccel) < 0.005) angAccel = 0;
+            document.getElementById('val-angaccel').innerText = angAccel.toFixed(3) + ' rad/s²';
+
+            let deg = (rod.angle * 180) / Math.PI % 360;
+            if (deg > 180) deg -= 360;
+            if (deg < -180) deg += 360;
+            document.getElementById('val-orientation').innerText = deg.toFixed(0) + '°';
+            document.getElementById('val-netthrust').innerText = netThrust.toFixed(0) + ' N';
+
+            const mult = dampRotation ? smoothLogDamping(omega) : 1.0;
+            document.getElementById('damp-band-display').innerText = 'α ×' + mult.toFixed(3);
+
+            lastVelocity.x = rod.velocity.x;
+            lastVelocity.y = rod.velocity.y;
+            lastAngVel = omega;
+        });
+
+        // --- UI ---
+        const bindSlider = (id, unit, isAngle) => {
+            const el = document.getElementById(id);
+            const disp = document.getElementById(id + '-val');
+            el.addEventListener('input', () => {
+                const val = parseFloat(el.value);
+                disp.innerText = val + (isAngle ? '°' : (unit === 'N' ? ' N' : (unit === 'kg' ? ' kg' : ' m')));
+            });
+        };
+        bindSlider('f1-mag', 'N', false);
+        bindSlider('f1-ang', '', true);
+        bindSlider('f1-pos', 'm', false);
+        bindSlider('f2-mag', 'N', false);
+        bindSlider('f2-ang', '', true);
+        bindSlider('f2-pos', 'm', false);
+        bindSlider('beam-mass', 'kg', false);
+
+        document.getElementById('beam-mass').addEventListener('input', (e) => {
+            setBeamMass(parseFloat(e.target.value));
+        });
+        setBeamMass(2);
+
+        document.getElementById('btn-pause').addEventListener('click', () => setPaused(!isPaused));
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            Body.setPosition(rod, { x: initialRodState.x, y: initialRodState.y });
+            Body.setAngle(rod, initialRodState.angle);
+            Body.setVelocity(rod, { x: 0, y: 0 });
+            Body.setAngularVelocity(rod, 0);
+            lastVelocity = { x: 0, y: 0 };
+            lastAngVel = 0;
+            linearAccel = 0;
+            angAccel = 0;
+            trail.length = 0;
+            camera.x = 0; camera.y = 0;
+        });
+
+        document.getElementById('btn-clear-trail').addEventListener('click', () => { trail.length = 0; });
+
+        document.getElementById('damp-rotation').addEventListener('change', (e) => {
+            dampRotation = e.target.checked;
+        });
+
+        document.getElementById('show-trail').addEventListener('change', (e) => { showTrail = e.target.checked; });
+        document.getElementById('time-scale').addEventListener('input', (e) => {
+            timeScale = parseFloat(e.target.value);
+            document.getElementById('speed-label').innerText = timeScale.toFixed(1) + '×';
+            if (!isPaused) engine.timing.timeScale = timeScale;
+        });
+
+        // --- Zoom ---
+        const zoomSlider = document.getElementById('zoom-slider');
+        const zoomLabel = document.getElementById('zoom-label');
+        function setZoom(z, anchorX, anchorY) {
+            z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+            if (anchorX !== undefined) {
+                const cw = render.options.width / 2;
+                const ch = render.options.height / 2;
+                const focusX = initialRodState.x + camera.x;
+                const focusY = initialRodState.y + camera.y;
+                const wx = (anchorX - cw) / camera.zoom + focusX;
+                const wy = (anchorY - ch) / camera.zoom + focusY;
+                const newFocusX = wx - (anchorX - cw) / z;
+                const newFocusY = wy - (anchorY - ch) / z;
+                camera.x = newFocusX - initialRodState.x;
+                camera.y = newFocusY - initialRodState.y;
+            }
+            camera.zoom = z;
+            zoomSlider.value = zoomToSlider(z);
+            zoomLabel.innerText = z.toFixed(z < 1 ? 3 : 1) + '×';
+        }
+        zoomSlider.addEventListener('input', (e) => {
+            setZoom(sliderToZoom(parseFloat(e.target.value)));
+        });
+
+        container.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            const factor = Math.exp(-e.deltaY * 0.0015);
+            setZoom(camera.zoom * factor, mx, my);
+        });
+
+        let dragging = false, dragStart = null, camStart = null;
+        container.addEventListener('mousedown', (e) => {
+            if (e.button === 2 || e.button === 0) {
+                dragging = true;
+                dragStart = { x: e.clientX, y: e.clientY };
+                camStart = { x: camera.x, y: camera.y };
+            }
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const dx = (e.clientX - dragStart.x) / camera.zoom;
+            const dy = (e.clientY - dragStart.y) / camera.zoom;
+            camera.x = camStart.x - dx;
+            camera.y = camStart.y - dy;
+        });
+        window.addEventListener('mouseup', () => { dragging = false; });
+        container.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        window.addEventListener('resize', () => {
+            render.options.width = container.clientWidth;
+            render.options.height = container.clientHeight;
+            Render.setPixelRatio(render, window.devicePixelRatio);
+        });
+
+        Render.setPixelRatio(render, window.devicePixelRatio);
+        setZoom(0.15);
+    </script>
+</body>
+</html>
